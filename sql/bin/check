@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -u
+
+ROOT=/workspace
+ROW_LIMIT=5000
+TASKS=(01 02 03 04 05 06 07 08 09 10)
+
+normalize() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 10 )) || return 1
+  printf '%02d' "$((10#$1))"
+}
+
+has_query() {
+  grep -Eqv '^[[:space:]]*(--.*)?$' "$1" 2>/dev/null
+}
+
+run_query() {
+  psql -X -q --csv -v ON_ERROR_STOP=1 -f "$1" >"$2" 2>"$3"
+}
+
+digest_rows() {
+  tail -n +2 "$1" | sha256sum | cut -d' ' -f1
+}
+
+digest_sorted_rows() {
+  tail -n +2 "$1" | LC_ALL=C sort | sha256sum | cut -d' ' -f1
+}
+
+count_rows() {
+  tail -n +2 "$1" | wc -l | tr -d ' '
+}
+
+evaluate() {
+  local out err status
+  out=$(mktemp)
+  err=$(mktemp)
+  compare_with_expected "$1" "$2" "$out" "$err"
+  status=$?
+  rm -f "$out" "$err"
+  return "$status"
+}
+
+compare_with_expected() {
+  local task=$1 file=$2 out=$3 err=$4
+
+  if ! has_query "$file"; then
+    MESSAGE="Решения пока нет: файл $file пуст."
+    return 2
+  fi
+  if ! run_query "$file" "$out" "$err"; then
+    MESSAGE="Запрос завершился ошибкой:"$'\n'"$(cat "$err")"
+    return 2
+  fi
+
+  local COLUMNS_EXPECTED ROWS_EXPECTED UNORDERED_EXPECTED ORDERED_EXPECTED
+  source "$ROOT/check/expected/$task"
+
+  local columns rows
+  columns=$(head -n 1 "$out")
+  rows=$(count_rows "$out")
+
+  if (( rows > ROW_LIMIT )); then
+    MESSAGE="Запрос вернул $rows строк: на тесте ответ ограничен $ROW_LIMIT строками."
+    return 7
+  fi
+  if [[ "$columns" != "$COLUMNS_EXPECTED" ]]; then
+    MESSAGE="Колонки не совпадают."$'\n'"  ожидается: $COLUMNS_EXPECTED"$'\n'"  получено:  $columns"
+    return 3
+  fi
+  if [[ "$rows" != "$ROWS_EXPECTED" ]]; then
+    MESSAGE="Неверное число строк: получено $rows, ожидается $ROWS_EXPECTED."
+    return 4
+  fi
+  if [[ "$(digest_sorted_rows "$out")" != "$UNORDERED_EXPECTED" ]]; then
+    MESSAGE="Число строк верное ($rows), но значения в них отличаются от ожидаемых."
+    return 5
+  fi
+  if [[ "$(digest_rows "$out")" != "$ORDERED_EXPECTED" ]]; then
+    MESSAGE="Строки верные, но порядок другой. Проверь ORDER BY по условию."
+    return 6
+  fi
+  MESSAGE="Зачёт!"
+  return 0
+}
+
+print_digest() {
+  local file=$1 out err
+  out=$(mktemp)
+  err=$(mktemp)
+  if ! run_query "$file" "$out" "$err"; then
+    cat "$err" >&2
+    rm -f "$out" "$err"
+    exit 2
+  fi
+  printf 'COLUMNS_EXPECTED=%q\n' "$(head -n 1 "$out")"
+  printf 'ROWS_EXPECTED=%s\n' "$(count_rows "$out")"
+  printf 'UNORDERED_EXPECTED=%s\n' "$(digest_sorted_rows "$out")"
+  printf 'ORDERED_EXPECTED=%s\n' "$(digest_rows "$out")"
+  rm -f "$out" "$err"
+}
+
+show_progress() {
+  local task solved=0 status
+  for task in "${TASKS[@]}"; do
+    evaluate "$task" "$ROOT/solutions/$task.sql"
+    status=$?
+    case $status in
+      0) printf '  %s  зачёт\n' "$task"; solved=$((solved + 1)) ;;
+      2) if has_query "$ROOT/solutions/$task.sql"; then
+           printf '  %s  ошибка в запросе\n' "$task"
+         else
+           printf '  %s  -\n' "$task"
+         fi ;;
+      *) printf '  %s  не сходится\n' "$task" ;;
+    esac
+  done
+  printf '\nРешено: %d из %d\n' "$solved" "${#TASKS[@]}"
+}
+
+if [[ "${1:-}" == "--digest" ]]; then
+  print_digest "$2"
+  exit 0
+fi
+
+if [[ $# -eq 0 ]]; then
+  show_progress
+  exit 0
+fi
+
+if ! task=$(normalize "$1"); then
+  echo "Номер задания должен быть от 1 до 10."
+  exit 1
+fi
+
+evaluate "$task" "${2:-$ROOT/solutions/$task.sql}"
+status=$?
+echo "$MESSAGE"
+exit "$status"

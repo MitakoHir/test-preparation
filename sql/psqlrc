@@ -1,0 +1,17 @@
+\set QUIET 1
+\pset null '(null)'
+\set PROMPT1 'shop=> '
+\set PROMPT2 '...> '
+\echo ''
+\echo 'Тренажёр SQL. База: shop, только чтение, 5 секунд на запрос.'
+\echo ''
+\echo '  \\! task 4             условие задания 4'
+\echo '  \\! hint 4             подсказка'
+\echo '  \\i solutions/04.sql   выполнить своё решение и посмотреть результат'
+\echo '  \\! check 4            проверить решение'
+\echo '  \\! check              прогресс по всем заданиям'
+\echo '  \\dt                   список таблиц'
+\echo '  \\d orders             структура таблицы'
+\echo '  \\q                    выход'
+\echo ''
+\unset QUIET

@@ -1,0 +1,43 @@
+name: test-prep
+
+services:
+  db:
+    image: postgres:16
+    profiles: [sql]
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: --locale-provider=icu --icu-locale=ru-RU
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, shop]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+
+  psql:
+    image: postgres:16
+    profiles: [sql]
+    depends_on:
+      db:
+        condition: service_healthy
+    working_dir: /workspace
+    environment:
+      PGHOST: db
+      PGUSER: student
+      PGPASSWORD: student
+      PGDATABASE: shop
+      PSQLRC: /workspace/psqlrc
+      PAGER: less -SFX
+      PATH: /workspace/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/postgresql/16/bin
+    volumes:
+      - ./sql/tasks:/workspace/tasks:ro
+      - ./sql/hints:/workspace/hints:ro
+      - ./sql/bin:/workspace/bin:ro
+      - ./sql/check:/workspace/check:ro
+      - ./sql/psqlrc:/workspace/psqlrc:ro
+      - ./sql/solutions:/workspace/solutions
+    command: [psql]
