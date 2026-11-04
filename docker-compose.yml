@@ -41,3 +41,22 @@ services:
       - ./sql/psqlrc:/workspace/psqlrc:ro
       - ./sql/solutions:/workspace/solutions
     command: [psql]
+
+  python:
+    image: python:3.12-slim
+    profiles: [python]
+    network_mode: none
+    working_dir: /workspace
+    environment:
+      PATH: /workspace/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: /workspace/solutions
+    volumes:
+      - ./python/tasks:/workspace/tasks:ro
+      - ./python/hints:/workspace/hints:ro
+      - ./python/bin:/workspace/bin:ro
+      - ./python/check:/workspace/check:ro
+      - ./python/tests:/workspace/tests:ro
+      - ./python/bashrc:/workspace/bashrc:ro
+      - ./python/solutions:/workspace/solutions
+    command: [bash, --rcfile, /workspace/bashrc]

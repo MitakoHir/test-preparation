@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -u
+
+if [[ ! "${1:-}" =~ ^[0-9]+$ ]] || (( 10#$1 < 1 || 10#$1 > 10 )); then
+  echo "Укажи номер задания от 1 до 10, например: hint 4"
+  exit 1
+fi
+
+cat "/workspace/hints/$(printf '%02d' "$((10#$1))").md"
